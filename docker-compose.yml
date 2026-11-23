@@ -1,0 +1,83 @@
+name: home-service-dispatch
+x-python: &python
+  image: home-service-dispatch-app:1
+  build: ./backend
+  environment: &app-env
+    DB_HOST: db
+    DB_PASSWORD: ${MYSQL_PASSWORD:-dispatch_local_pw}
+    REDIS_URL: redis://redis:6379/0
+    JWT_SECRET: ${JWT_SECRET:-dispatch-demo-local-change-before-sharing-23b6e}
+    SEED_DEMO: ${SEED_DEMO:-true}
+    TZ: Asia/Shanghai
+    OPENBLAS_NUM_THREADS: '1'
+    OMP_NUM_THREADS: '1'
+  depends_on:
+    db: {condition: service_healthy}
+    redis: {condition: service_healthy}
+  volumes:
+    - dispatch-runtime:/run/dispatch
+services:
+  db:
+    image: mysql:8.0
+    container_name: ${COMPOSE_PROJECT_NAME:-home-service-dispatch}-db
+    environment:
+      MYSQL_DATABASE: dispatch
+      MYSQL_USER: dispatch
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-dispatch_local_pw}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-dispatch_local_root}
+    ports:
+      - '127.0.0.1:${DB_PORT:-17747}:3306'
+    volumes:
+      - dispatch-data:/var/lib/mysql
+      - ./backend/migrations/001_dispatch.sql:/docker-entrypoint-initdb.d/001_dispatch.sql:ro
+    healthcheck:
+      test: [CMD-SHELL, 'mysql --protocol=tcp -h 127.0.0.1 -u dispatch -p"$$MYSQL_PASSWORD" dispatch -e "SELECT 1 FROM service_orders LIMIT 0"']
+      interval: 3s
+      timeout: 3s
+      retries: 25
+  redis:
+    image: redis:7-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-home-service-dispatch}-redis
+    volumes:
+      - dispatch-cache:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+  backend:
+    <<: *python
+    container_name: ${COMPOSE_PROJECT_NAME:-home-service-dispatch}-backend
+    command: [sh, -c, 'if [ "$$SEED_DEMO" = true ]; then python -m scripts.seed_demo || echo "Demo seed failed" >&2; fi; exec uvicorn src.app:app --host 0.0.0.0 --port 8000']
+    ports:
+      - '127.0.0.1:${BACKEND_PORT:-19247}:8000'
+    healthcheck:
+      test: [CMD, python, -c, 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=2)']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  worker:
+    <<: *python
+    container_name: ${COMPOSE_PROJECT_NAME:-home-service-dispatch}-worker
+    command: [python, -m, src.worker]
+    healthcheck:
+      test: [CMD, python, -c, 'import os,time; assert time.time() - os.stat("/run/dispatch/worker").st_mtime < 10']
+      interval: 3s
+      timeout: 3s
+      retries: 15
+  frontend:
+    build: ./frontend
+    container_name: ${COMPOSE_PROJECT_NAME:-home-service-dispatch}-frontend
+    depends_on:
+      backend: {condition: service_healthy}
+    ports:
+      - '127.0.0.1:${FRONTEND_PORT:-18247}:80'
+    healthcheck:
+      test: [CMD, wget, -qO, /dev/null, 'http://127.0.0.1/api/health']
+      interval: 3s
+      timeout: 3s
+      retries: 10
+volumes:
+  dispatch-data:
+  dispatch-cache:
+  dispatch-runtime:

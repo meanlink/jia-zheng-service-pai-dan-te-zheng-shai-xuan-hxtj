@@ -1,0 +1,9 @@
+fastapi==0.115.6
+uvicorn==0.34.0
+PyMySQL==1.1.1
+redis==5.2.1
+PyJWT==2.10.1
+tzdata==2025.2
+scikit-learn==1.6.1
+numpy==2.2.6
+scipy==1.15.3
