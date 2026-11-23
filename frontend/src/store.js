@@ -1,6 +1,7 @@
 export const state = {
   token: sessionStorage.getItem('qili-session'), session: null,
-  orders: [], technicians: [], plans: [], selectedOrder: null, selectedPlan: null, selectedTech: null,
+  orders: [], technicians: [], plans: [], featureRules: {},
+  selectedOrder: null, selectedPlan: null, selectedTech: null,
 };
 
 export function setToken(token) {
@@ -8,8 +9,8 @@ export function setToken(token) {
   if (token) sessionStorage.setItem('qili-session', token);
   else {
     sessionStorage.removeItem('qili-session');
-    Object.assign(state, {session: null, orders: [], technicians: [], plans: [], selectedOrder: null,
-      selectedPlan: null, selectedTech: null});
+    Object.assign(state, {session: null, orders: [], technicians: [], plans: [], featureRules: {},
+      selectedOrder: null, selectedPlan: null, selectedTech: null});
   }
 }
 

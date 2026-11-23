@@ -253,6 +253,12 @@ textarea { resize: vertical; min-height: 68px; }
 .field-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .field-metrics > div { display: grid; gap: 4px; }
 .field-metrics strong { color: var(--clay-deep); font: 700 25px/1.25 var(--serif); }
+.field-metrics strong small { font: 500 11px var(--sans); color: var(--soft); }
+.feature-picks { border: 1px solid var(--rule); border-radius: 3px; padding: 10px 12px 12px; display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.feature-picks legend { padding: 0 5px; color: var(--soft); font-size: 12px; font-weight: 600; }
+label.pick { display: flex; align-items: center; gap: 6px; color: var(--ink); font-size: 13px; }
+label.pick input { width: auto; min-height: 0; }
+.field-result .field-metrics strong { font-size: 19px; }
 @media (max-width: 850px) {
   .field-columns, .scenario-layout { grid-template-columns: minmax(0, 1fr); }
 }

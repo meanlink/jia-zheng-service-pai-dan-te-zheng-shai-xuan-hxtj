@@ -17,4 +17,5 @@ export const EVENTS = {
   access_recorded: '入户核验登记', scope_proposed: '提交范围补测', scope_decided: '完成范围复核',
   scenario_saved: '保存工时假设对照', handover_issued: '发出上门交接', handover_arrival: '登记到场回执',
   pre_dispatch_reviewed: '派单前复核', followup_recorded: '回访登记', post_followup_reviewed: '复盘结案',
+  feature_rule_compared: '对照品类特征组', feature_rule_enabled: '启用品类特征组',
 };

@@ -1,5 +1,5 @@
 import {api} from './api.js';
-import {ROLES} from './domain.js';
+import {ROLES, SERVICES} from './domain.js';
 import {setToken,state} from './store.js';
 import {esc, formHandler, notify} from './ui.js';
 import {handoverPage} from './pages/handover.js';
@@ -86,6 +86,11 @@ async function refresh() {
   ]);
   if (id !== revision || !state.token) return;
   Object.assign(state,{session,orders,technicians,plans});
+  const services = Object.keys(SERVICES);
+  const rules = await Promise.all(services.map(service =>
+    api(`/feature-rules/${service}`).catch(() => null)));
+  if (id !== revision || !state.token) return;
+  state.featureRules = Object.fromEntries(services.map((service, index) => [service, rules[index]]));
   draw();
 }
 

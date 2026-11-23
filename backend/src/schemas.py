@@ -1,8 +1,9 @@
 from datetime import date
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
+from .feature_model import FEATURES
 from .models import Service, Slot
 
 
@@ -61,3 +62,19 @@ class VisitContact(Review):
     outcome: Literal['confirmed', 'reschedule', 'moved']
     service_date: date | None = None
     slot: Slot | None = None
+
+
+class RuleComparison(Input):
+    features: list[Literal[*FEATURES]] = Field(min_length=1, max_length=len(FEATURES))
+    note: Note
+
+    @field_validator('features')
+    @classmethod
+    def ordered_unique(cls, value):
+        if len(set(value)) != len(value):
+            raise ValueError('特征集合不能重复')
+        return sorted(value, key=FEATURES.index)
+
+
+class RuleEnable(Review):
+    pass

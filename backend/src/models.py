@@ -42,10 +42,12 @@ ORDER_FIELDS = '''id, code, customer, neighborhood, service, service_date, slot,
 TECH_FIELDS = 'id, code, name, skill, certificate, valid_through, experience_years, active'
 PLAN_FIELDS = '''id, order_id, technician_id, status, analysis, error_message,
     predicted_minutes, deviation_limit, pre_review_note, confirm_by, actual_minutes,
-    followup_note, post_review_note, updated_at'''
+    followup_note, post_review_note, updated_at, feature_rule'''
 
 
 def plan_row(row):
     if row and row['analysis'] is not None:
         row['analysis'] = json.loads(row['analysis'])
+    if row and row.get('feature_rule') is not None:
+        row['feature_rule'] = json.loads(row['feature_rule'])
     return row

@@ -9,18 +9,20 @@ from fastapi.responses import JSONResponse
 from pymysql import MySQLError
 from redis.exceptions import RedisError
 
-from . import dispatch, intake, scheduling
+from . import dispatch, intake, rules, scheduling
 from .db import audit, cache, today, transaction
 from .field_routes import router as field_router
-from .migrations import initialize_fieldwork
-from .models import Role
-from .schemas import AnalysisRequest, Followup, Login, NewOrder, Renewal, Review, TimeOff, VisitContact
+from .migrations import initialize_schema
+from .models import Role, Service
+from .schemas import (AnalysisRequest, Followup, Login, NewOrder, Renewal, Review, RuleComparison,
+                      RuleEnable, TimeOff, VisitContact)
 from .security import current_user, hash_password, issue_token, permits, verify_password
+
 
 @asynccontextmanager
 async def lifespan(_app):
     scheduling.initialize()
-    initialize_fieldwork()
+    initialize_schema()
     yield
 
 
@@ -151,6 +153,22 @@ def order_events(order_id: int, _user=Depends(current_user)):
           WHERE subject_kind='order' AND subject=%s ORDER BY id""",
                     (order['code'],))
         return cur.fetchall()
+
+
+@api.get('/feature-rules/{service}')
+def feature_rules(service: Service, _user=Depends(current_user)):
+    with transaction() as cur:
+        return rules.list_for_service(cur, service)
+
+
+@api.post('/feature-rules/{service}/comparisons', status_code=201)
+def compare_feature_rules(service: Service, data: RuleComparison, user=Depends(permits(Role.DISPATCHER))):
+    return rules.compare(service, data, user['sub'])
+
+
+@api.post('/feature-rules/comparisons/{comparison_id}/enable')
+def enable_feature_rules(comparison_id: int, data: RuleEnable, user=Depends(permits(Role.SUPERVISOR))):
+    return rules.enable(comparison_id, data, user['sub'])
 
 
 @api.get('/time-off')

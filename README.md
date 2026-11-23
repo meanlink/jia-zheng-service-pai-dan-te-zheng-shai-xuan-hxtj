@@ -44,9 +44,23 @@ Seed 写入 5 位技师、5 张待办和 168 张分为两品类的合成完单�
 
 - 资质检查同时看启用状态、服务品类和有效期。证书截止日含当天，必须覆盖上海业务日与预约日。分析排队、worker、试算及确认均检查。待确认方案如换证，必须重新分析。
 - 一个订单只有一个当前方案，可在确认前换人重新分析。由技师行锁串行处理同日同时段的确认，已经预订的时段直接拒绝重复派单。
+- 每个服务品类各有一组现行特征规则（`category_feature_rules`），新分析默认按该品类现行规则取特征。排队时把当时的规则快照写入方案；已经排队的分析即使随后启用了新规则，仍按排队时的规则计算。
 - worker 按日期取最多 2,000 条记录，固定分界日留出约 20% 给验证集。特征标准化只在训练集拟合。Lasso 以固定 α=3 求解 `||y−Xw||²/(2n)+α||w||₁`，以非零系数筛选。在线性回归中用原始单位重拟合，输出保留特征的系数、验证 MAE、训练均值和 `系数 ×（本单值 − 训练均值）`。
 - 预测工时等于训练均值加各特征贡献后四舍五入。以分钟记录，用 `|预测 − 受理预估|` 和 `|实绩 − 预测|` 分别决定派单前和回访后复核，默认严格大于 30 分钟才进入复核。超出历史训练范围的输入在页面中标出。
 - 历史低于 30 条、日期不足以切分、无入选特征或模型共线时，worker 返回可读失败原因，方案可以重试。确认的技师经验以当时快照入账。拟合快照保存同一批历史的 SHA-256 供比对。
+
+## 品类特征组对照与启用
+
+特征工作台按当前待派工单的品类显示该品类的现行规则与候选对照。
+
+1. 调度勾选一组候选特征提交对照。对照取现行规则与候选规则**同一批**已结案完单，并按**同一验证起日**切分；两次拟合的历史 SHA-256 与验证起日必须一致，否则拒绝保存。对照同时记录总体留出集 MAE 和高污损单（污损等级 ≥ 4）留出集 MAE。
+2. 对照结论由这两项误差直接判定：两项都不变大才算通过；任一项变大即不通过；验证集高污损单少于 6 单则样本不足、暂缓启用。页面与接口都按记录中的误差重新判定，不采信单独写入的结论字段。
+3. 只有运营主管能启用，且只能启用“通过”的对照。启用时在事务内重新核对对照所依据的现行规则仍是当前规则：若另一位主管已提交并启用了新规则，旧对照作废，须按新的现行规则重新对照后再启用，不会被静默覆盖。
+4. 启用即对该品类一次性切换：写入新版本规则、停用旧版本，并记录审计（含被替换的版本与候选特征）。此后该品类新排队的分析使用新特征组；已排队的分析仍按排队快照计算。
+5. 新特征组若求解失败（如未保留任何特征或共线），本次分析沿用被替换的旧规则并标注回退原因，避免整个品类失去预测。
+
+高污损单缺样时暂缓启用。对照历史少于 30 条或无法按日期切分时，接口返回可读的失败原因。
+
 
 ## 代码与本地开发
 
@@ -55,12 +69,12 @@ Seed 写入 5 位技师、5 张待办和 168 张分为两品类的合成完单�
 | 页面 | `frontend/index.html`、`style.css` 和 `src/pages/`，原生 ES modules，经 Nginx `/api/` 转发 |
 | 接口与鉴权 | `backend/src/app.py`、`schemas.py`、`security.py`，FastAPI、JWT HS256、Redis 登录限流 |
 | 业务 | `backend/src/intake.py`、`dispatch.py`、`models.py`，MySQL 事务、状态和审计 |
-| 分析 | `backend/src/feature_model.py` 和 `worker.py`，scikit-learn、MySQL 持久化队列、工作进程心跳 |
+| 分析 | `backend/src/feature_model.py`、`worker.py` 和 `rules.py`，scikit-learn、MySQL 持久化队列、品类特征规则版本、工作进程心跳 |
 | 环境与 seed | `docker-compose.yml`、`backend/migrations/001_dispatch.sql`、`backend/scripts/seed_demo.py` |
 
 修改 Python 后可执行 `docker compose up -d --build backend worker`。修改静态页面后重建 `frontend`。需要用宿主 Python 开发时，先起 `db` 和 `redis`，并在 `backend/` 安装依赖。API 读 `DB_HOST`、`MYSQL_PORT`、`DB_PASSWORD`、`REDIS_URL`、`JWT_SECRET`。Redis 默认只在容器网络可见，日常本地测试用 Compose 即可。`.env.example` 列出了宿主端口、MySQL 用户密码与 root 密码、JWT 签名和 seed 开关。
 
-岗位、服务品类、预约时段、订单状态、方案状态的枚举分别见 `backend/src/models.py`、`frontend/src/domain.js` 和迁移 SQL。接口输入由 `backend/src/schemas.py` 复用 Python 枚举；状态转换由 `backend/src/dispatch.py` 执行。
+岗位、服务品类、预约时段、订单状态、方案状态的枚举分别见 `backend/src/models.py`、`frontend/src/domain.js` 和迁移 SQL。接口输入由 `backend/src/schemas.py` 复用 Python 枚举；状态转换由 `backend/src/dispatch.py` 执行。品类特征规则、对照与启用记录在 `backend/migrations/003_feature_rules.sql`，由 `backend/src/migrations.py` 在启动时补齐。
 
 许可证为 MIT，见 `LICENSE`。
 

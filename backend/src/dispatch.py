@@ -1,5 +1,8 @@
+import json
+
 from fastapi import HTTPException
 
+from . import rules
 from .access import require_access
 from .handover import require_arrival
 from .scope import require_decision
@@ -78,15 +81,21 @@ def queue_analysis(order_id, technician_id, actor):
         require_qualification(order, technician)
         require_available(cur, technician, order)
         require_dispatch_readiness(cur, order['id'])
+        # Pin the category rule at queue time. A later supervisor switch must
+        # not change what this already-queued analysis computes.
+        rule = rules.snapshot(cur, order['service'])
         if prior:
             plan_id = prior['id']
             cur.execute('''UPDATE dispatch_plans SET status='queued',technician_id=%s,analysis=NULL,
-              predicted_minutes=NULL,error_message=NULL,pre_review_note=NULL WHERE id=%s''', (technician_id, plan_id))
+              predicted_minutes=NULL,error_message=NULL,pre_review_note=NULL,feature_rule=%s WHERE id=%s''',
+                        (technician_id, json.dumps(rule), plan_id))
         else:
-            cur.execute("INSERT INTO dispatch_plans(order_id,technician_id,status) VALUES (%s,%s,'queued')",
-                        (order_id, technician_id))
+            cur.execute("""INSERT INTO dispatch_plans(order_id,technician_id,status,feature_rule)
+                           VALUES (%s,%s,'queued',%s)""",
+                        (order_id, technician_id, json.dumps(rule)))
             plan_id = cur.lastrowid
-        audit(cur, actor, 'analysis_queued', order['code'], plan_id=plan_id, technician=technician['code'])
+        audit(cur, actor, 'analysis_queued', order['code'], plan_id=plan_id, technician=technician['code'],
+              rule_version=rule['version'], rule_features=rule['features'])
         return get_plan(cur, plan_id)
 
 
